@@ -1,0 +1,95 @@
+name: 'Setup cuenv'
+description: 'Download and install cuenv CLI'
+inputs:
+  version:
+    description: 'Version of cuenv to install (e.g. 0.8.3). Defaults to "latest".'
+    required: false
+    default: 'latest'
+  github-token:
+    description: 'GitHub token to avoid rate limits when resolving "latest" version'
+    required: false
+    default: ${{ github.token }}
+runs:
+  using: "composite"
+  steps:
+    - name: Determine version
+      shell: bash
+      id: version
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        if [ "$INPUT_VERSION" = "latest" ]; then
+          # Use GitHub API to get latest release tag
+          LATEST_TAG=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/cuenv/cuenv/releases/latest | jq -r .tag_name)
+          if [ "$LATEST_TAG" = "null" ] || [ -z "$LATEST_TAG" ]; then
+            echo "::error::Failed to resolve latest version. Please specify a version manually."
+            exit 1
+          fi
+          echo "Resolved latest version to: $LATEST_TAG"
+          echo "version=$LATEST_TAG" >> $GITHUB_OUTPUT
+        else
+          echo "Using specified version: $INPUT_VERSION"
+          echo "version=$INPUT_VERSION" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Determine architecture and OS
+      shell: bash
+      id: target
+      run: |
+        OS="$(uname -s)"
+        ARCH="$(uname -m)"
+        TARGET=""
+
+        if [ "$OS" = "Linux" ]; then
+          if [ "$ARCH" = "x86_64" ]; then
+            TARGET="x86_64-unknown-linux-gnu"
+          else
+            echo "::error::Unsupported Linux architecture: $ARCH"
+            exit 1
+          fi
+        elif [ "$OS" = "Darwin" ]; then
+           # We only have x86_64 builds for mac currently based on release info
+           # MacOS on Apple Silicon can run x86_64 binaries via Rosetta 2
+           TARGET="x86_64-apple-darwin"
+        else
+          echo "::error::Unsupported OS: $OS"
+          exit 1
+        fi
+        echo "target=$TARGET" >> $GITHUB_OUTPUT
+
+    - name: Download and install cuenv
+      shell: bash
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+        TARGET: ${{ steps.target.outputs.target }}
+      run: |
+        # Construct URL
+        # We use the version tag exactly as provided for the download URL path and filename
+        URL="https://github.com/cuenv/cuenv/releases/download/${VERSION}/cuenv-${VERSION}-${TARGET}.tar.gz"
+        echo "Downloading from $URL..."
+
+        TMP_DIR=$(mktemp -d)
+        if ! curl -fL -o "$TMP_DIR/cuenv.tar.gz" "$URL"; then
+            echo "::error::Failed to download cuenv from $URL"
+            exit 1
+        fi
+
+        mkdir -p "$TMP_DIR/extracted"
+        tar -xzf "$TMP_DIR/cuenv.tar.gz" -C "$TMP_DIR/extracted"
+
+        # Find binary
+        BIN_PATH=$(find "$TMP_DIR/extracted" -name cuenv -type f | head -n 1)
+        
+        if [ -z "$BIN_PATH" ]; then
+           echo "::error::Could not find cuenv binary in extracted archive"
+           exit 1
+        fi
+
+        INSTALL_DIR="$HOME/.cuenv/bin"
+        mkdir -p "$INSTALL_DIR"
+        cp "$BIN_PATH" "$INSTALL_DIR/"
+        chmod +x "$INSTALL_DIR/cuenv"
+
+        echo "$INSTALL_DIR" >> $GITHUB_PATH
+        echo "Installed cuenv version $VERSION to $INSTALL_DIR"
