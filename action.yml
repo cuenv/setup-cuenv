@@ -43,7 +43,7 @@ runs:
 
         if [ "$OS" = "Linux" ]; then
           if [ "$ARCH" = "x86_64" ]; then
-            TARGET="x86_64-unknown-linux-gnu"
+            TARGET="x86_64-unknown-linux-musl"
           else
             echo "::error::Unsupported Linux architecture: $ARCH"
             exit 1
@@ -64,8 +64,6 @@ runs:
         VERSION: ${{ steps.version.outputs.version }}
         TARGET: ${{ steps.target.outputs.target }}
       run: |
-        # Construct URL
-        # We use the version tag exactly as provided for the download URL path and filename
         URL="https://github.com/cuenv/cuenv/releases/download/${VERSION}/cuenv-${VERSION}-${TARGET}.tar.gz"
         echo "Downloading from $URL..."
 
