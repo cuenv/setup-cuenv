@@ -43,7 +43,7 @@ runs:
 
         if [ "$OS" = "Linux" ]; then
           if [ "$ARCH" = "x86_64" ]; then
-            TARGET="x86_64-unknown-linux-musl"
+            TARGET="x86_64-unknown-linux-gnu"
           else
             echo "::error::Unsupported Linux architecture: $ARCH"
             exit 1
